@@ -2,40 +2,60 @@
 % AUTHOR: Richard Harless
 % DATE: 7/14/2026
 
-function [X,Y,MaxDiff,n] = dT_Optimizer(L_Bound,U_Bound,Function,max_err)
+function [X,Y,MaxDiff,n_points] = dT_Optimizer(L_Bound,U_Bound,max_err,Function)
+
+arguments
+    L_Bound (1,1) double % Lower Bound of Input Values
+    U_Bound (1,1) double % Upper Bound of Input Values
+    max_err (1,1) double % Maximum allowed percent error
+end
+arguments (Repeating)
+    Function (1,1) function_handle % Function
+end
 
 %Create Points
-n = 10;
+n_points = 10;
+n_functions = numel(Function);
 too_much_error = 0;
 iterations = 0;
 increasing = 0;
 
 while too_much_error == 0
-    Points = linspace(L_Bound,U_Bound,n);
-    relax = 0.01*(U_Bound-L_Bound);
-    Max_dT = zeros(n-1,1);
-    Graph = plot(Points,Function(Points),'k.','MarkerSize',10);
-    hold on
-    X1 = linspace(L_Bound,U_Bound,100);
-    plot(X1,Function(X1),'b')
-    D = 10*ones(n-1,1);
-    while max(abs(D)) > 1e-2
-        for i = 1:n-1
-            Max_dT(i) = dT(Points(i),Points(i+1),Function);
-        end
-        D = gradient(Max_dT);
-        Points(2:n-1) = Points(2:n-1) + transpose(relax*D(2:n-1));
-        Graph.XData = Points;
-        Graph.YData = Function(Points);
-        drawnow
-    end
-    hold off
+    Points = linspace(L_Bound,U_Bound,n_points);
+    relax = 0.03*(U_Bound-L_Bound);
 
-    if max(Max_dT) < max_err && n ~= 2
-        n = n-1;
+    Max_dT = 10*ones(n_points-1,n_functions);
+
+    % Graph = plot(Points,Function(Points),'ko','MarkerSize',6,'MarkerFaceColor','k');
+    % hold on
+    % X1 = linspace(L_Bound,U_Bound,100);
+    % plot(X1,Function(X1),'b')
+
+    D = 10*ones(n_points-1,n_functions);
+    Delta = 10*ones(n_points-1,1);
+    while max(abs(Delta),[],'all') > 1e-3 && max(Max_dT,[],'all') > max_err
+        for i = 1:n_points-1
+            for j = 1:n_functions
+            Max_dT(i,j) = dT(Points(i),Points(i+1),Function{j});
+            end
+        end
+        for j = 1:n_functions
+            D(:,j) = gradient(Max_dT(:,j));
+        end
+        Points(2:n_points-1) = Points(2:n_points-1) + transpose(relax*sum(D(2:n_points-1,:),2));
+        Delta = transpose(relax*sum(D(2:n_points-1,:),2));
+
+        % Graph.XData = Points;
+        % Graph.YData = Function(Points);
+        % drawnow
+    end
+    % hold off
+
+    if max(Max_dT,[],'all') < max_err && n_points ~= 2
+        n_points = n_points-1;
         increasing = 0;
-    elseif max(Max_dT) > max_err && (iterations == 0 || increasing == 1)
-        n = n + 1;
+    elseif max(Max_dT,[],'all') > max_err && (iterations == 0 || increasing == 1)
+        n_points = n_points + 1;
         increasing = 1;
     else
         too_much_error = 1;
@@ -45,8 +65,11 @@ while too_much_error == 0
 end
 
 X = Points;
-Y = Function(Points);
-MaxDiff = max(Max_dT);
+Y = zeros(n_points,n_functions);
+for i = 1:n_functions
+    Y(:,i) = Function{i}(Points);
+end
+MaxDiff = max(Max_dT,[],'all');
 
     function max_dT_percent = dT(A,B,Function)
 
